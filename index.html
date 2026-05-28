@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Task Board</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
+
+<style>
+/* --- your original CSS unchanged --- */
+:root {
+  --bg:#F5F2EB; --bg2:#EDEAE0; --bg3:#E4E0D4;
+  --card:#FAFAF7; --ink:#1C1B18; --ink2:#5A5850; --ink3:#908E86;
+  --accent:#2D5A3D; --accent-light:#E8F0EA;
+  --red:#A02020; --red-light:#F7EBEB;
+  --border:rgba(28,27,24,0.12);
+  --radius:10px;
+  --shadow:0 1px 3px rgba(28,27,24,0.08),0 4px 16px rgba(28,27,24,0.04);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Mono', monospace;background:var(--bg);color:var(--ink);min-height:100vh}
+
+/* --- header --- */
+header{background:var(--ink);color:#F5F2EB;padding:18px 32px;display:flex;justify-content:space-between}
+.logo{font-family:'Fraunces',serif;font-size:22px}
+.logo span{color:#A8C8A8}
+
+/* --- buttons --- */
+.btn{font-size:12px;padding:8px 16px;border-radius:6px;cursor:pointer}
+.btn-primary{background:var(--accent);color:white}
+
+/* --- layout --- */
+main{padding:28px 32px;max-width:1100px;margin:auto}
+.kanban{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.column{background:var(--bg2);border-radius:10px;padding:16px}
+
+/* --- tasks --- */
+.task-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:13px;
+  margin-bottom:10px;
+  position:relative;
+  cursor:pointer;
+}
+.task-card.done{opacity:.6}
+.task-title{font-weight:500;margin-bottom:8px}
+.task-card.done .task-title{text-decoration:line-through}
+
+.assignee-bubble{
+  width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;border:1px solid var(--border);
+}
+
+.check-btn{
+  position:absolute;top:8px;right:8px;width:22px;height:22px;
+  border-radius:50%;
+  border:1px solid var(--border);
+  background:none;cursor:pointer;
+}
+
+/* --- modal simple --- */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none}
+.modal-overlay.open{display:flex;align-items:center;justify-content:center}
+.modal{background:white;padding:20px;border-radius:12px;width:400px}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">Task<span>Board</span></div>
+  <button class="btn btn-primary" onclick="openAddModal()">+ New Task</button>
+</header>
+
+<main>
+
+<div class="kanban">
+  <div>
+    <h3>To Do</h3>
+    <div id="todo"></div>
+  </div>
+  <div>
+    <h3>Done</h3>
+    <div id="done"></div>
+  </div>
+</div>
+
+</main>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">New Task</h3>
+    <input id="title" placeholder="Task..." style="width:100%;margin-bottom:10px">
+    <textarea id="desc" placeholder="Description..." style="width:100%"></textarea>
+
+    <div id="members"></div>
+
+    <button onclick="saveTask()">Save</button>
+    <button onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+
+/* ---------------- DATA ---------------- */
+let data = JSON.parse(localStorage.getItem("taskboard")) || {
+  members:["Matt","Gina","Dragana","Alex","Elaine","Scott"],
+  tasks:[]
+};
+
+function save(){ localStorage.setItem("taskboard", JSON.stringify(data)); }
+
+/* ---------------- HELPERS ---------------- */
+function initials(name){ return name[0].toUpperCase(); }
+
+/* ---------------- RENDER ---------------- */
+function render(){
+  const todo = document.getElementById("todo");
+  const done = document.getElementById("done");
+
+  todo.innerHTML="";
+  done.innerHTML="";
+
+  data.tasks.forEach(t=>{
+    const el=document.createElement("div");
+    el.className="task-card"+(t.done?" done":"");
+
+    el.title = t.title + (t.desc ? " — "+t.desc : "");
+
+    el.innerHTML=`
+      <div class="task-title">${t.title}</div>
+      <div style="display:flex;gap:4px;margin-bottom:6px">
+        ${(t.assignees||[]).map(a=>`
+          <div class="assignee-bubble" title="Assigned: ${a}">
+            ${initials(a)}
+          </div>
+        `).join("")}
+      </div>
+      <button class="check-btn" title="${t.done?'Mark as not done':'Mark as done'}">✓</button>
+    `;
+
+    el.querySelector(".check-btn").onclick=(e)=>{
+      e.stopPropagation();
+      t.done=!t.done;
+      save(); render();
+    };
+
+    el.onclick=()=>editTask(t.id);
+
+    (t.done?done:todo).appendChild(el);
+  });
+}
+
+/* ---------------- MODAL ---------------- */
+let editing=null;
+
+function openAddModal(){
+  editing=null;
+  document.getElementById("modal").classList.add("open");
+  buildMembers([]);
+}
+
+function editTask(id){
+  const t=data.tasks.find(x=>x.id===id);
+  editing=id;
+  document.getElementById("title").value=t.title;
+  document.getElementById("desc").value=t.desc;
+  buildMembers(t.assignees);
+  document.getElementById("modal").classList.add("open");
+}
+
+function closeModal(){
+  document.getElementById("modal").classList.remove("open");
+}
+
+function buildMembers(selected){
+  const m=document.getElementById("members");
+  m.innerHTML=data.members.map(name=>`
+    <div 
+      onclick="this.classList.toggle('sel')"
+      title="${name}"
+      style="display:inline-block;border:1px solid #ccc;padding:4px;margin:2px;cursor:pointer"
+      class="${selected
